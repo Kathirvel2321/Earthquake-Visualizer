@@ -1,23 +1,161 @@
-import logo from './logo.svg';
-import './App.css';
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+
+import "./App.css";
+
+// Fix default marker icon (Leaflet bug in React)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
+
+function ChangeView({ center, zoom }) {
+  const map = useMap();
+  map.setView(center, zoom);
+  return null;
+}
 
 function App() {
+  const [earthquakes, setEarthquakes] = useState([]);
+  const [timeRange, setTimeRange] = useState("day");
+  const [minMag, setMinMag] = useState(4.5);
+  const [selectedEq, setSelectedEq] = useState(null);
+
+  useEffect(() => {
+    fetchData();
+  }, [timeRange, minMag]);
+
+  const fetchData = async () => {
+  try {
+    let magFeed = "all"; // default
+
+    if (minMag >= 4.5) magFeed = "4.5";
+    else if (minMag >= 2.5) magFeed = "2.5";
+    else if (minMag >= 1.0) magFeed = "1.0";
+    else magFeed = "all";
+
+    const url = `https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/${magFeed}_${timeRange}.geojson`;
+    const response = await axios.get(url);
+
+    const features = response.data.features.map((eq) => ({
+      id: eq.id,
+      place: eq.properties.place,
+      mag: eq.properties.mag,
+      time: new Date(eq.properties.time).toLocaleString(),
+      coordinates: [
+        eq.geometry.coordinates[1],
+        eq.geometry.coordinates[0],
+      ],
+    }));
+
+    setEarthquakes(features);
+  } catch (error) {
+    console.error("Error fetching data:", error);
+  }
+};
+
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
+    <div className="app">
+      <header className="header">
+        <h1>🌍 Earthquake Visualizer</h1>
       </header>
+
+      <div className="main">
+        {/* Left Panel */}
+        <div className="sidebar">
+          <h2>Recent Earthquakes</h2>
+
+          <label>Time Range</label>
+          <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)}>
+            <option value="hour">Past Hour</option>
+            <option value="day">Past Day</option>
+            <option value="week">Past 7 Days</option>
+            <option value="month">Past 30 Days</option>
+          </select>
+
+          <label>Min Magnitude</label>
+          <input
+            type="number"
+            value={minMag}
+            step="0.1"
+            onChange={(e) => setMinMag(e.target.value)}
+          />
+
+          <div className="eq-list">
+            {earthquakes.map((eq) => (
+              <div
+                key={eq.id}
+                className={`eq-item ${
+                  selectedEq?.id === eq.id ? "active" : ""
+                }`}
+                onClick={() => setSelectedEq(eq)}
+              >
+                <strong>{eq.place}</strong>
+                <p className="mag">Magnitude: {eq.mag}</p>
+                <p className="time">{eq.time}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right Panel */}
+        <div className="content">
+          <h2>Magnitude Chart</h2>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={earthquakes}>
+              <XAxis dataKey="place" hide />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="mag" fill="#2563eb" />
+            </BarChart>
+          </ResponsiveContainer>
+
+          <div className="map-container">
+            <MapContainer
+              center={[20, 0]}
+              zoom={2}
+              style={{ height: "400px", width: "100%" }}
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution="&copy; OpenStreetMap contributors"
+              />
+
+              {selectedEq && (
+                <>
+                  <ChangeView center={selectedEq.coordinates} zoom={5} />
+                  <Marker position={selectedEq.coordinates}>
+                    <Popup>
+                      <b>{selectedEq.place}</b>
+                      <br />
+                      Magnitude: {selectedEq.mag}
+                      <br />
+                      {selectedEq.time}
+                    </Popup>
+                  </Marker>
+                </>
+              )}
+            </MapContainer>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
