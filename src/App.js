@@ -92,7 +92,7 @@ function App() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.7 }}
       >
-        <h1>🌍 Earthquake Visualizer</h1>
+        <h1> Earthquake Visualizer</h1>
       </motion.header>
 
       <div className="main">
